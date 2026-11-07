@@ -1,0 +1,370 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+if game.GameId ~= 66654135 then
+    game:GetService("Players").LocalPlayer:Kick("This script is only for Murder Mystery 2")
+    return
+end
+if getgenv().MM2FarmCleanup then pcall(getgenv().MM2FarmCleanup) end
+
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hoquocluc9182-del/library-ui/refs/heads/main/Arsenic-Toxic.ui"))()
+
+local Win = Library:Window({
+    Title = "MM2 Farm",
+    Size = UDim2.fromOffset(540, 420),
+})
+
+if Win.Gui then Win.Gui.Enabled = true end
+if Win.FloatGui then Win.FloatGui.Enabled = true end
+Win:Watermark(true)
+
+local CONFIG = {
+    CoinSkipTime = 3, 
+    Noclip = true, 
+    AutoDie = true, 
+    TargetCoins = 50,
+    AntiAfk = true, 
+    AntiBan = true,
+    CacheMapTime = 5, 
+    PruneInterval = 60, 
+    OverlayRefresh = 1.0,
+    FPSBoost = false, 
+    TeleportDelay = 1.5, 
+    SpinDuration = 0.5, 
+    TeleSpeed = 300,
+}
+
+local STATE = {
+    Running = false, BagCurrent = 0, BagMax = 0, Status = "Ready",
+    CoinsTotal = 0, CoinsThisRound = 0, Rounds = 0,
+    SkippedCoins = {}, NoclipConn = nil,
+    HasDiedThisRound = false, LastBagCount = 0,
+    CachedMap = nil, CachedContainer = nil,
+    LastMapCheck = 0, CachedCoinList = nil, LastCoinListTime = 0,
+    Render3DEnabled = true, Teleporting = false, 
+}
+
+local CONNECTIONS = {}
+local function Track(conn) CONNECTIONS[#CONNECTIONS + 1] = conn return conn end
+local function DisconnectAll()
+    for _, conn in ipairs(CONNECTIONS) do pcall(function() conn:Disconnect() end) end
+    table.clear(CONNECTIONS)
+end
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+local LP = Players.LocalPlayer
+
+local CoinCollected, CoinsStarted, RoundStart
+do
+    local remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+    local gameplay = remotes and remotes:WaitForChild("Gameplay", 10)
+    if gameplay then
+        CoinCollected = gameplay:FindFirstChild("CoinCollected")
+        CoinsStarted = gameplay:FindFirstChild("CoinsStarted")
+        RoundStart = gameplay:FindFirstChild("RoundStart")
+    end
+end
+
+if CoinCollected then
+    Track(CoinCollected.OnClientEvent:Connect(function(_, current, maximum)
+        STATE.BagCurrent = tonumber(current) or 0
+        STATE.BagMax = tonumber(maximum) or 0
+        STATE.CoinsTotal += 1
+        STATE.CoinsThisRound += 1
+    end))
+end
+
+local function OnNewRound()
+    STATE.BagCurrent = 0; STATE.BagMax = 0; STATE.CoinsThisRound = 0
+    STATE.Rounds += 1; STATE.HasDiedThisRound = false; STATE.LastBagCount = 0
+    STATE.Teleporting = false
+    table.clear(STATE.SkippedCoins)
+    STATE.CachedMap = nil; STATE.CachedContainer = nil; STATE.LastMapCheck = 0; STATE.CachedCoinList = nil
+end
+
+if CoinsStarted then Track(CoinsStarted.OnClientEvent:Connect(OnNewRound)) end
+if RoundStart then Track(RoundStart.OnClientEvent:Connect(OnNewRound)) end
+
+local function GetRoot() local c = LP.Character return c and c:FindFirstChild("HumanoidRootPart") end
+local function GetHumanoid() local c = LP.Character return c and c:FindFirstChildOfClass("Humanoid") end
+
+local function GetMap()
+    local now = os.clock()
+    if STATE.CachedMap and STATE.CachedMap.Parent and now - STATE.LastMapCheck < CONFIG.CacheMapTime then 
+        return STATE.CachedMap, STATE.CachedContainer 
+    end
+    STATE.LastMapCheck = now
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child.Name ~= "RegularLobby" and child:IsA("Model") then
+            local container = child:FindFirstChild("CoinContainer", true)
+            if container then
+                STATE.CachedMap = child; STATE.CachedContainer = container; STATE.CachedCoinList = nil
+                return child, container
+            end
+        end
+    end
+    STATE.CachedMap = nil; STATE.CachedContainer = nil; STATE.CachedCoinList = nil
+    return nil, nil
+end
+
+local function GetCoinList()
+    local container = STATE.CachedContainer
+    if not container or not container.Parent then return nil end
+    local now = os.clock()
+    if STATE.CachedCoinList and now - STATE.LastCoinListTime < 1 then return STATE.CachedCoinList end
+    STATE.LastCoinListTime = now
+    local list = container:GetChildren()
+    STATE.CachedCoinList = list
+    return list
+end
+
+local function CountCoins()
+    local list = GetCoinList()
+    if not list then return 0 end
+    local n = 0
+    for i = 1, #list do
+        local v = list[i]:FindFirstChild("CoinVisual")
+        if v and not v:GetAttribute("Collected") then n += 1 end
+    end
+    return n
+end
+
+local function FindNearestCoin(origin)
+    local list = GetCoinList()
+    if not list then return nil end
+    local best, bestDist
+    local now = os.clock()
+    local ox, oy, oz = origin.X, origin.Y, origin.Z
+    for i = 1, #list do
+        local coin = list[i]
+        if coin:IsA("BasePart") then
+            local visual = coin:FindFirstChild("CoinVisual")
+            if visual and not visual:GetAttribute("Collected") then
+                local skippedAt = STATE.SkippedCoins[coin]
+                if not (skippedAt and now - skippedAt < CONFIG.CoinSkipTime) then
+                    local p = coin.Position
+                    local dist = math.sqrt((p.X-ox)^2 + (p.Y-oy)^2 + (p.Z-oz)^2)
+                    if not bestDist or dist < bestDist then best, bestDist = coin, dist end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function GetTarget() return STATE.BagMax > 0 and STATE.BagMax or CONFIG.TargetCoins end
+local function BagFull() return STATE.BagCurrent > 0 and STATE.BagCurrent >= GetTarget() end
+
+task.spawn(function()
+    while true do
+        task.wait(CONFIG.PruneInterval)
+        local now = os.clock()
+        for coin, t in pairs(STATE.SkippedCoins) do
+            if not coin.Parent or now - t > CONFIG.CoinSkipTime then STATE.SkippedCoins[coin] = nil end
+        end
+    end
+end)
+
+local function SetNoclip(enabled)
+    if STATE.NoclipConn then STATE.NoclipConn:Disconnect(); STATE.NoclipConn = nil end
+    if enabled then
+        STATE.NoclipConn = RunService.Stepped:Connect(function()
+            local c = LP.Character
+            if not c then return end
+            for _, part in ipairs(c:GetChildren()) do
+                if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+            end
+        end)
+    end
+end
+
+local function SetFPSBoost(enabled)
+    pcall(function() RunService:Set3dRenderingEnabled(not enabled) end)
+    STATE.Render3DEnabled = not enabled
+end
+
+Track(LP.Idled:Connect(function()
+    if not CONFIG.AntiAfk then return end
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.zero)
+end))
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if not STATE.Running then continue end
+        
+        local hrp = GetRoot()
+        local hum = GetHumanoid()
+        
+        if not hrp or not hum or hum.Health <= 0 then
+            STATE.Status = "Waiting for character..."
+            continue
+        end
+        
+        if STATE.Teleporting then continue end
+        
+        if BagFull() and not STATE.HasDiedThisRound then
+            STATE.Status = ("Reached %d -> Dying"):format(GetTarget())
+            if CONFIG.AutoDie then 
+                STATE.HasDiedThisRound = true
+                hum.Health = 0 
+            end
+            continue
+        end
+        
+        local map, container = GetMap()
+        if not map then
+            STATE.Status = "Map not found..."
+            continue
+        end
+        
+        local coin = FindNearestCoin(hrp.Position)
+        if coin and coin.Parent then
+            STATE.Teleporting = true
+            STATE.Status = ("Teleporting (%d/%d)"):format(STATE.BagCurrent, GetTarget())
+            
+            local distance = (hrp.Position - coin.Position).Magnitude
+            local duration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 1.5)
+            local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
+            tween:Play()
+            
+            task.wait(duration)
+            
+            if not STATE.Running then 
+                STATE.Teleporting = false 
+                break 
+            end
+            
+            local spinEnd = os.clock() + CONFIG.SpinDuration
+            while os.clock() < spinEnd do
+                local currentHrp = GetRoot()
+                if currentHrp then
+                    currentHrp.CFrame = currentHrp.CFrame * CFrame.Angles(0, math.rad(35), 0)
+                end
+                RunService.RenderStepped:Wait()
+            end
+            
+            task.wait(CONFIG.TeleportDelay)
+            
+            STATE.SkippedCoins[coin] = os.clock()
+            STATE.Teleporting = false
+        else
+            STATE.Status = "No coins left."
+        end
+    end
+end)
+
+local overlay = Instance.new("ScreenGui")
+overlay.Name = "MM2FarmStatus"; overlay.ResetOnSpawn = false; overlay.IgnoreGuiInset = true
+overlay.Parent = (gethui and gethui()) or game.CoreGui
+
+local oFrame = Instance.new("Frame")
+oFrame.Size = UDim2.new(0, 200, 0, 85); oFrame.Position = UDim2.new(1, -210, 0, 10)
+oFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25); oFrame.BackgroundTransparency = 0.2
+oFrame.BorderSizePixel = 0; oFrame.Active = true; oFrame.Draggable = true; oFrame.Parent = overlay
+Instance.new("UICorner", oFrame).CornerRadius = UDim.new(0, 6)
+local oStroke = Instance.new("UIStroke"); oStroke.Color = Color3.fromRGB(200, 200, 210); oStroke.Thickness = 1.2; oStroke.Parent = oFrame
+local oLabel = Instance.new("TextLabel")
+oLabel.Size = UDim2.new(1, -12, 1, -12); oLabel.Position = UDim2.new(0, 6, 0, 6)
+oLabel.BackgroundTransparency = 1; oLabel.TextColor3 = Color3.fromRGB(230, 230, 240)
+oLabel.Font = Enum.Font.Code; oLabel.TextSize = 12; oLabel.TextXAlignment = Enum.TextXAlignment.Left; oLabel.TextYAlignment = Enum.TextYAlignment.Top
+oLabel.TextWrapped = true; oLabel.Text = "Ready"; oLabel.Parent = oFrame
+
+task.spawn(function()
+    while overlay.Parent do
+        task.wait(CONFIG.OverlayRefresh)
+        pcall(function()
+            local coins = STATE.Running and CountCoins() or 0
+            local died = STATE.HasDiedThisRound and " (dead)" or ""
+            oLabel.Text = table.concat({
+                STATE.Status .. died,
+                ("Bag: %d/%d | Coin: %d"):format(STATE.BagCurrent, GetTarget(), coins),
+                ("Total: %d | Round: %d"):format(STATE.CoinsTotal, STATE.Rounds),
+            }, "\n")
+        end)
+    end
+end)
+
+local FarmTab = Win:Tab("Farm")
+local FarmSec = FarmTab:Section("Auto Farm Coin")
+
+FarmSec:Toggle({
+    Text = "Enable Farm Coin",
+    Default = false,
+    Callback = function(state)
+        STATE.Running = state
+        if state then
+            STATE.SkippedCoins = {}; STATE.HasDiedThisRound = false; STATE.LastBagCount = 0
+            STATE.Teleporting = false
+            STATE.Status = "Farming..."
+            if CONFIG.Noclip then SetNoclip(true) end
+            Win:Notify({ Title = "MM2 Farm", Text = "Started farming", Duration = 4 })
+        else
+            SetNoclip(false); STATE.Status = "Stopped"
+            Win:Notify({ Title = "MM2 Farm", Text = "Stopped farming", Duration = 3 })
+        end
+    end,
+})
+
+FarmSec:Slider({
+    Text = "Target Coins",
+    Min = 10, Max = 100, Default = 50,
+    Callback = function(v) CONFIG.TargetCoins = tonumber(v) or 50 end,
+})
+
+FarmSec:Slider({
+    Text = "Teleport Delay (s)",
+    Min = 1, Max = 5, Default = 1.5, Decimals = 1,
+    Callback = function(v) CONFIG.TeleportDelay = tonumber(v) or 1.5 end,
+})
+
+FarmSec:Button({
+    Text = "Die Now",
+    Callback = function() 
+        local hum = GetHumanoid()
+        if hum then hum.Health = 0 end 
+    end,
+})
+
+local AntiBanTab = Win:Tab("Anti-Ban")
+local MainABSec = AntiBanTab:Section("Protection")
+
+MainABSec:Toggle({ Text = "Noclip", Default = true, Callback = function(s) CONFIG.Noclip = s; if STATE.Running then SetNoclip(s) end end })
+MainABSec:Toggle({ Text = "Anti-AFK", Default = true, Callback = function(s) CONFIG.AntiAfk = s end })
+MainABSec:Toggle({ Text = "Auto Die", Default = true, Callback = function(s) CONFIG.AutoDie = s end })
+
+local ActionSec = AntiBanTab:Section("Actions")
+ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Teleporting = false end })
+
+local PerfTab = Win:Tab("Performance")
+local PerfSec = PerfTab:Section("FPS Boost")
+PerfSec:Toggle({
+    Text = "FPS Boost (Disable 3D)",
+    Default = false,
+    Callback = function(s) CONFIG.FPSBoost = s; SetFPSBoost(s) end,
+})
+
+local TuningSec = PerfTab:Section("Tuning")
+TuningSec:Button({
+    Text = "Clear Memory",
+    Callback = function()
+        local now = os.clock()
+        for coin, t in pairs(STATE.SkippedCoins) do
+            if not coin.Parent or now - t > CONFIG.CoinSkipTime then STATE.SkippedCoins[coin] = nil end
+        end
+        STATE.CachedMap = nil; STATE.CachedContainer = nil; STATE.CachedCoinList = nil
+        pcall(function() collectgarbage("collect") end)
+        Win:Notify({Title = "System", Text = "Memory cleared!"})
+    end,
+})
+
+getgenv().MM2FarmCleanup = function()
+    STATE.Running = false
+    SetNoclip(false); SetFPSBoost(false)
+    DisconnectAll()
+    if overlay and overlay.Parent then overlay:Destroy() end
+end
