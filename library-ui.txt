@@ -92,7 +92,7 @@ function Library:Window(opts)
     local imgBtn = New("ImageButton", {Size = UDim2.new(0, 65, 0, 65), Position = UDim2.new(0, 20, 0.5, -32), BackgroundColor3 = T.Panel, BorderSizePixel = 0, AutoButtonColor = false, Parent = floatGui})
     Corner(imgBtn, 12); Stroke(imgBtn, Color3.fromRGB(100, 100, 120), 2.5)
     
-    imgBtn.Image = "rbxassetid://83246864993361"
+    imgBtn.Image = "rbxassetid://84764400030423"
 
     local draggingIcon, dragStartIcon, startPosIcon
     imgBtn.InputBegan:Connect(function(input)
