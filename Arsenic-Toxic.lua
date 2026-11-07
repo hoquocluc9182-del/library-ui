@@ -117,11 +117,18 @@ function Library:Window(opts)
     local Main = New("Frame", {Name = "Main", Size = size, Position = UDim2.new(0.5, -size.X.Offset/2, 0.5, -size.Y.Offset/2), BackgroundColor3 = T.Background, BorderSizePixel = 0, ClipsDescendants = true, Parent = gui})
     Corner(Main, 10); Stroke(Main, T.Stroke, 1.5)
 
+    local topIcon = New("ImageLabel", {Size = UDim2.new(0, 75, 0, 75), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Image = SPIN_IMG, ZIndex = 50, Parent = gui})
+    
+    local function updateTopIconPos()
+        topIcon.Position = UDim2.new(Main.Position.X.Scale, Main.Position.X.Offset + 5, Main.Position.Y.Scale, Main.Position.Y.Offset + 5)
+    end
+    updateTopIconPos()
+    Main:GetPropertyChangedSignal("Position"):Connect(updateTopIconPos)
+
     local TopBar = New("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = Main})
     AddGradient(TopBar, ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), ColorSequenceKeypoint.new(1, Color3.new(0.85,0.85,0.85))}))
     
-    local topIcon = New("ImageLabel", {Size = UDim2.new(0, 24, 0, 24), Position = UDim2.new(0, 12, 0.5, -12), BackgroundTransparency = 1, Image = SPIN_IMG, Parent = TopBar})
-    New("TextLabel", {Size = UDim2.new(1, -140, 0, 40), Position = UDim2.new(0, 44, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = title, Parent = TopBar})
+    New("TextLabel", {Size = UDim2.new(1, -140, 0, 40), Position = UDim2.new(0, 50, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = title, Parent = TopBar})
 
     local minBtn = New("TextButton", {Size = UDim2.new(0, 26, 0, 26), Position = UDim2.new(1, -66, 0.5, -13), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 16, TextColor3 = T.Text, Text = "-", AutoButtonColor = false, Parent = TopBar})
     Corner(minBtn, 6)
