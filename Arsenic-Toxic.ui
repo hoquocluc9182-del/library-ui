@@ -8,12 +8,12 @@ local LocalPlayer = Players.LocalPlayer
 local Library = {}
 Library.__index = Library
 Library.Theme = {
-    Background = Color3.fromRGB(20, 20, 25), Sidebar = Color3.fromRGB(25, 25, 32),
-    Panel = Color3.fromRGB(30, 30, 40), Element = Color3.fromRGB(38, 38, 50),
-    ElementHover = Color3.fromRGB(48, 48, 65), Accent = Color3.fromRGB(138, 99, 255),
-    Text = Color3.fromRGB(240, 240, 250), SubText = Color3.fromRGB(160, 160, 180),
-    Stroke = Color3.fromRGB(55, 55, 75), ToggleOff = Color3.fromRGB(55, 55, 75),
-    Danger = Color3.fromRGB(230, 80, 90),
+    Background = Color3.fromRGB(15, 18, 15), Sidebar = Color3.fromRGB(20, 24, 20),
+    Panel = Color3.fromRGB(25, 30, 25), Element = Color3.fromRGB(32, 40, 32),
+    ElementHover = Color3.fromRGB(45, 55, 45), Accent = Color3.fromRGB(130, 240, 60),
+    Text = Color3.fromRGB(230, 240, 230), SubText = Color3.fromRGB(140, 160, 140),
+    Stroke = Color3.fromRGB(45, 55, 45), ToggleOff = Color3.fromRGB(45, 55, 45),
+    Danger = Color3.fromRGB(255, 60, 60), Success = Color3.fromRGB(130, 240, 60),
 }
 local T = Library.Theme
 Library.AccentObjects = {}
@@ -64,7 +64,7 @@ local function CleanupOldGUI()
     for _, parent in ipairs({targetParent, playerGui, coreGui}) do
         if parent then
             for _, obj in ipairs(parent:GetChildren()) do
-                if obj.Name == "UILibrary" or obj.Name == "UIFloatingIcon" or obj.Name == "UIWatermark" then obj:Destroy() end
+                if obj.Name == "ArsenicUI" or obj.Name == "ArsenicFloatingIcon" or obj.Name == "ArsenicWatermark" or obj.Name == "ArsenicKeySystem" then obj:Destroy() end
             end
         end
     end
@@ -94,12 +94,12 @@ end
 
 local function CreateRipple(button)
     button.MouseButton1Down:Connect(function(x, y)
-        local ripple = New("Frame", {Size = UDim2.new(0,0,0,0), Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y), BackgroundColor3 = Color3.new(1,1,1), BackgroundTransparency = 0.5, ZIndex = 10, Parent = button})
+        local ripple = New("Frame", {Size = UDim2.new(0,0,0,0), Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y), BackgroundColor3 = T.Accent, BackgroundTransparency = 0.5, ZIndex = 10, Parent = button})
         Corner(ripple, 100)
         TweenService:Create(ripple, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, button.AbsoluteSize.X * 2, 0, button.AbsoluteSize.X * 2),
+            Size = UDim2.new(0, button.AbsoluteSize.X * 2.5, 0, button.AbsoluteSize.X * 2.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, (x - button.AbsolutePosition.X) - button.AbsoluteSize.X/2, 0, (y - button.AbsolutePosition.Y) - button.AbsoluteSize.X/2)
+            Position = UDim2.new(0, (x - button.AbsolutePosition.X) - button.AbsoluteSize.X * 1.25, 0, (y - button.AbsolutePosition.Y) - button.AbsoluteSize.X * 1.25)
         }):Play()
         task.delay(0.5, function() ripple:Destroy() end)
     end)
@@ -108,35 +108,35 @@ end
 function Library:Window(opts)
     opts = opts or {}
     CleanupOldGUI()
-    local title = opts.Title or "Script Hub"
+    local title = opts.Title or "Arsenic Toxic"
     local size = opts.Size or UDim2.fromOffset(580, 400)
-    local configFolder = "UILibraryConfigs"
+    local configFolder = "ArsenicConfigs"
 
-    local gui = New("ScreenGui", {Name = "UILibrary", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true, Parent = getGuiParent()})
+    local gui = New("ScreenGui", {Name = "ArsenicUI", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true, Enabled = false, Parent = getGuiParent()})
     Library.Gui = gui
     Library.Connections = {}
     Library.AccentObjects = {}
     Library.TextAccentObjects = {}
 
-    local floatGui = New("ScreenGui", {Name = "UIFloatingIcon", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = getGuiParent()})
+    local floatGui = New("ScreenGui", {Name = "ArsenicFloatingIcon", ResetOnSpawn = false, IgnoreGuiInset = true, Enabled = false, Parent = getGuiParent()})
     local imgBtn = New("ImageButton", {Size = UDim2.new(0, 65, 0, 65), Position = UDim2.new(0, 20, 0.5, -32), BackgroundColor3 = T.Panel, BorderSizePixel = 0, AutoButtonColor = false, Parent = floatGui})
-    Corner(imgBtn, 12); Stroke(imgBtn, Color3.fromRGB(100, 100, 120), 2.5); AddGradient(imgBtn)
+    Corner(imgBtn, 12); Stroke(imgBtn, T.Accent, 2.5); AddGradient(imgBtn)
     imgBtn.Image = "rbxassetid://84764400030423"
 
     local wasIconDragged = SetupDrag(imgBtn, imgBtn)
     imgBtn.MouseButton1Click:Connect(function() if not wasIconDragged() then gui.Enabled = not gui.Enabled end end)
 
     local Main = New("Frame", {Name = "Main", Size = size, Position = UDim2.new(0.5, -size.X.Offset/2, 0.5, -size.Y.Offset/2), BackgroundColor3 = T.Background, BorderSizePixel = 0, ClipsDescendants = true, Parent = gui})
-    Corner(Main, 10); Stroke(Main, T.Stroke, 1)
+    Corner(Main, 10); Stroke(Main, T.Stroke, 1.5)
 
     local TopBar = New("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = Main})
-    AddGradient(TopBar, ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), ColorSequenceKeypoint.new(1, Color3.new(0.85,0.85,0.85))}))
-    New("TextLabel", {Size = UDim2.new(1, -120, 0, 40), Position = UDim2.new(0, 14, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = title, Parent = TopBar})
+    AddGradient(TopBar, ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(0.8,1,0.8)), ColorSequenceKeypoint.new(1, Color3.new(0.5,0.6,0.5))}))
+    New("TextLabel", {Size = UDim2.new(1, -120, 0, 40), Position = UDim2.new(0, 14, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = "☠ " .. title, Parent = TopBar})
 
     local minBtn = New("TextButton", {Size = UDim2.new(0, 26, 0, 26), Position = UDim2.new(1, -66, 0.5, -13), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 16, TextColor3 = T.Text, Text = "-", AutoButtonColor = false, Parent = TopBar})
-    Corner(minBtn, 6)
+    Corner(minBtn, 6); CreateRipple(minBtn)
     local closeBtn = New("TextButton", {Size = UDim2.new(0, 26, 0, 26), Position = UDim2.new(1, -34, 0.5, -13), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = T.Text, Text = "X", AutoButtonColor = false, Parent = TopBar})
-    Corner(closeBtn, 6)
+    Corner(closeBtn, 6); CreateRipple(closeBtn)
 
     SetupDrag(TopBar, Main)
 
@@ -149,7 +149,7 @@ function Library:Window(opts)
 
     local Sidebar = New("Frame", {Size = UDim2.new(0, 140, 1, -40), Position = UDim2.new(0, 0, 0, 40), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = Main})
     
-    local SearchBox = New("TextBox", {Size = UDim2.new(1, -16, 0, 26), Position = UDim2.new(0, 8, 0, 8), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.Text, PlaceholderText = "Search...", PlaceholderColor3 = T.SubText, Text = "", ClearTextOnFocus = false, Parent = Sidebar})
+    local SearchBox = New("TextBox", {Size = UDim2.new(1, -16, 0, 26), Position = UDim2.new(0, 8, 0, 8), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.Text, PlaceholderText = "Search toxins...", PlaceholderColor3 = T.SubText, Text = "", ClearTextOnFocus = false, Parent = Sidebar})
     Corner(SearchBox, 6); Stroke(SearchBox, T.Stroke, 1)
 
     local TabList = New("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -50), Position = UDim2.new(0, 0, 0, 40), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = T.Accent, CanvasSize = UDim2.new(0,0,0,0), Parent = Sidebar})
@@ -173,7 +173,7 @@ function Library:Window(opts)
 
     local rightShiftConn = UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
-        if input.KeyCode == Enum.KeyCode.RightShift then gui.Enabled = not gui.Enabled end
+        if input.KeyCode == Enum.KeyCode.RightShift and gui.Enabled then gui.Enabled = not gui.Enabled end
     end)
     table.insert(Library.Connections, rightShiftConn)
     
@@ -204,45 +204,23 @@ function Library:Window(opts)
         Window:Filter(SearchBox.Text)
     end)
 
-    function Window:Tab(name, hidden, passKey)
-        local Tab = {Name = name, Hidden = hidden, PassKey = passKey, Sections = {}}
+    function Window:Tab(name)
+        local Tab = {Name = name, Sections = {}}
         Tab.Frame = New("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.Accent, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, Parent = Content})
         New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Tab.Frame})
         New("UIPadding", {PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 12), Parent = Tab.Frame})
 
-        local btn = New("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = "  " .. (hidden and "🔒 " .. name or name), AutoButtonColor = false, Parent = TabList})
-        Corner(btn, 6)
-        CreateRipple(btn)
+        local btn = New("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = "  " .. name, AutoButtonColor = false, Parent = TabList})
+        Corner(btn, 6); CreateRipple(btn)
 
         local function select()
             SearchBox.Text = ""
-            if hidden then
-                local prompt = New("Frame", {Size = UDim2.new(0, 200, 0, 100), Position = UDim2.new(0.5, -100, 0.5, -50), BackgroundColor3 = T.Panel, BorderSizePixel = 0, ZIndex = 100, Parent = gui})
-                Corner(prompt, 8); Stroke(prompt, T.Stroke, 1)
-                New("TextLabel", {Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = "Enter Password", ZIndex = 101, Parent = prompt})
-                local tb = New("TextBox", {Size = UDim2.new(1, -20, 0, 28), Position = UDim2.new(0, 10, 0, 35), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.Text, PlaceholderText = "Password...", Text = "", ZIndex = 101, Parent = prompt})
-                Corner(tb, 4)
-                tb.FocusLost:Connect(function(enter)
-                    if enter and tb.Text == (passKey or "1234") then
-                        prompt:Destroy()
-                        for _, t in pairs(Window.Tabs) do t.Frame.Visible = false; TweenService:Create(t.Btn, TweenInfo.new(0.15), {BackgroundColor3 = T.Element, TextColor3 = T.SubText}):Play() end
-                        Tab.Frame.Visible = true
-                        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = T.Accent, TextColor3 = T.Text}):Play()
-                        Window.CurrentTab = Tab
-                    else
-                        tb.Text = ""
-                        tb.PlaceholderText = "Wrong Pass!"
-                    end
-                end)
-                return
-            end
-
             for _, t in pairs(Window.Tabs) do
                 t.Frame.Visible = false
                 TweenService:Create(t.Btn, TweenInfo.new(0.15), {BackgroundColor3 = T.Element, TextColor3 = T.SubText}):Play()
             end
             Tab.Frame.Visible = true
-            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = T.Accent, TextColor3 = T.Text}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = T.Accent, TextColor3 = T.Background}):Play()
             Window.CurrentTab = Tab
         end
         
@@ -255,7 +233,7 @@ function Library:Window(opts)
             Corner(Frame, 8); Stroke(Frame, T.Stroke, 1)
             
             local HeaderBtn = New("TextButton", {Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 8), BackgroundTransparency = 1, Text = "", Parent = Frame})
-            local TitleLbl = New("TextLabel", {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = secName, Parent = HeaderBtn})
+            New("TextLabel", {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = secName, Parent = HeaderBtn})
             local ArrowLbl = New("TextLabel", {Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -20, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.SubText, Text = "▼", Parent = HeaderBtn})
             CreateRipple(HeaderBtn)
 
@@ -389,6 +367,7 @@ function Library:Window(opts)
                 New("TextLabel", {Size = UDim2.new(1, -100, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Text or "Keybind", Parent = h})
                 local btn = New("TextButton", {Size = UDim2.new(0, 80, 0, 22), Position = UDim2.new(1, -90, 0.5, -11), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Accent, Text = key.Name, AutoButtonColor = false, Parent = h})
                 Corner(btn, 5); Stroke(btn, T.Stroke, 1); RegisterAccent(btn, true)
+                CreateRipple(btn)
                 
                 local api = {Value = key, Type = "Keybind", Text = o.Text, Listening = false, Frame = h}
                 btn.MouseButton1Click:Connect(function()
@@ -488,7 +467,7 @@ function Library:Window(opts)
                 Corner(h, 6)
                 New("TextLabel", {Size = UDim2.new(1, -70, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Text or "Color Picker", Parent = h})
                 local colorBtn = New("TextButton", {Size = UDim2.new(0, 24, 0, 24), Position = UDim2.new(1, -34, 0.5, -12), BackgroundColor3 = color, BorderSizePixel = 0, Text = "", AutoButtonColor = false, Parent = h})
-                Corner(colorBtn, 4); Stroke(colorBtn, T.Stroke, 1)
+                Corner(colorBtn, 4); Stroke(colorBtn, T.Stroke, 1); CreateRipple(colorBtn)
                 
                 local api = {Value = color, Type = "ColorPicker", Text = o.Text, Frame = h}
                 colorBtn.MouseButton1Click:Connect(function()
@@ -505,7 +484,7 @@ function Library:Window(opts)
                         ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,0))
                     }), Parent = hueBar})
                     local closePicker = New("TextButton", {Size = UDim2.new(1, -10, 0, 20), Position = UDim2.new(0, 5, 1, -25), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = "Close", AutoButtonColor = false, ZIndex = 51, Parent = picker})
-                    Corner(closePicker, 4)
+                    Corner(closePicker, 4); CreateRipple(closePicker)
                     
                     local hue, sat, val = color:ToHSV()
                     local function updateColor()
@@ -553,7 +532,7 @@ function Library:Window(opts)
             
             return Section
         end
-        if not Window.CurrentTab and not hidden then select() end
+        if not Window.CurrentTab then select() end
         table.insert(Window.Tabs, Tab)
         return Tab
     end
@@ -579,7 +558,7 @@ function Library:Window(opts)
         local accentBar = New("Frame", {Size = UDim2.new(0, 4, 1, 0), BackgroundColor3 = o.Color or T.Accent, BorderSizePixel = 0, Parent = box})
         Corner(accentBar, 8)
         New("Frame", {Size = UDim2.new(0, 4, 0, 8), Position = UDim2.new(0, 0, 1, -8), BackgroundColor3 = o.Color or T.Accent, BorderSizePixel = 0, Parent = box})
-        New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 14, 0, 10), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Title or "Notification", Parent = box})
+        New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 14, 0, 10), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Title or "Arsenic Alert", Parent = box})
         New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 14, 0, 30), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Text or "", TextTruncate = Enum.TextTruncate.AtEnd, Parent = box})
         
         task.delay(duration, function()
@@ -592,8 +571,8 @@ function Library:Window(opts)
 
     function Window:Watermark(enabled)
         if not enabled then return end
-        local wmGui = New("ScreenGui", {Name = "UIWatermark", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = getGuiParent()})
-        local wmLabel = New("TextLabel", {Size = UDim2.new(0, 250, 0, 30), Position = UDim2.new(1, -260, 0, 15), BackgroundColor3 = T.Panel, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = " Hub | FPS: 60 | Ping: 20ms ", Parent = wmGui})
+        local wmGui = New("ScreenGui", {Name = "ArsenicWatermark", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = getGuiParent()})
+        local wmLabel = New("TextLabel", {Size = UDim2.new(0, 250, 0, 30), Position = UDim2.new(1, -260, 0, 15), BackgroundColor3 = T.Panel, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = " ☠ Arsenic | FPS: 60 | Ping: 20ms ", Parent = wmGui})
         Corner(wmLabel, 6); Stroke(wmLabel, T.Stroke, 1); AddGradient(wmLabel)
         
         local lastUpdate = 0
@@ -604,7 +583,7 @@ function Library:Window(opts)
                 local fps = math.floor(1 / math.max(dt, 0.001))
                 local ping = 0
                 pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing() * 1000) end)
-                wmLabel.Text = string.format(" %s | FPS: %d | Ping: %dms ", title, fps, ping)
+                wmLabel.Text = string.format(" ☠ %s | FPS: %d | Ping: %dms ", title, fps, ping)
             end
         end)
         table.insert(Library.Connections, conn)
@@ -643,6 +622,75 @@ function Library:Window(opts)
             end
         end
         return true
+    end
+
+    function Window:KeySystem(opts)
+        opts = opts or {}
+        local keyGui = New("ScreenGui", {Name = "ArsenicKeySystem", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = getGuiParent()})
+        
+        local keyFrame = New("Frame", {Size = UDim2.fromOffset(350, 220), Position = UDim2.new(0.5, -175, 0.5, -110), BackgroundColor3 = T.Background, BorderSizePixel = 0, Parent = keyGui})
+        Corner(keyFrame, 10); Stroke(keyFrame, T.Stroke, 1.5)
+        
+        local TopBar = New("Frame", {Size = UDim2.new(1, 0, 0, 35), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = keyFrame})
+        Corner(TopBar, 10)
+        New("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = TopBar}) 
+        
+        New("TextLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = T.Text, Text = "☠ " .. (opts.Title or "Arsenic Poison Control"), Parent = TopBar})
+        SetupDrag(TopBar, keyFrame)
+        
+        New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 45), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = "Enter the antidote (Key) to survive:", Parent = keyFrame})
+        
+        local inputBox = New("TextBox", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 70), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 13, TextColor3 = T.Text, PlaceholderText = "Enter Key...", PlaceholderColor3 = T.SubText, Text = "", ClearTextOnFocus = false, Parent = keyFrame})
+        Corner(inputBox, 6); Stroke(inputBox, T.Stroke, 1)
+        
+        local copyBtn = New("TextButton", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 110), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = "Copy Access Link", AutoButtonColor = false, Parent = keyFrame})
+        Corner(copyBtn, 6); CreateRipple(copyBtn)
+        copyBtn.MouseButton1Click:Connect(function()
+            if setclipboard then
+                setclipboard(opts.KeyLink or "https://arsenic-key.com")
+                copyBtn.Text = "Link Copied!"
+                task.delay(2, function() copyBtn.Text = "Copy Access Link" end)
+            else
+                copyBtn.Text = "Device Unsupported!"
+            end
+        end)
+        
+        local submitBtn = New("TextButton", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 150), BackgroundColor3 = T.Accent, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Background, Text = "Administer Antidote", AutoButtonColor = false, Parent = keyFrame})
+        Corner(submitBtn, 6); CreateRipple(submitBtn)
+        
+        local statusLbl = New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 190), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Danger, TextXAlignment = Enum.TextXAlignment.Center, Text = "", Parent = keyFrame})
+        
+        submitBtn.MouseButton1Click:Connect(function()
+            statusLbl.Text = "Verifying Toxicity Level..."
+            statusLbl.TextColor3 = T.SubText
+            local key = inputBox.Text
+            if key == "" then
+                statusLbl.Text = "Key cannot be empty!"
+                statusLbl.TextColor3 = T.Danger
+                return
+            end
+            
+            local isValid = false
+            if opts.Validate then
+                local success, result = pcall(opts.Validate, key)
+                if success then isValid = result end
+            else
+                isValid = (key == "arsenic")
+            end
+            
+            if isValid then
+                statusLbl.Text = "Access Granted. Antidote Administered."
+                statusLbl.TextColor3 = T.Success
+                task.wait(0.5)
+                keyGui:Destroy()
+                gui.Enabled = true
+                floatGui.Enabled = true
+            else
+                statusLbl.Text = "Invalid Key. Fatal Error."
+                statusLbl.TextColor3 = T.Danger
+                inputBox.Text = ""
+            end
+        end)
     end
 
     return Window
