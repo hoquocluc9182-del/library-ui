@@ -5,31 +5,19 @@ if game.GameId ~= 66654135 then
 end
 if getgenv().MM2FarmCleanup then pcall(getgenv().MM2FarmCleanup) end
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hoquocluc9182-del/library-ui/refs/heads/main/Arsenic-Toxic.ui"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hoquocluc9182-del/library-ui/refs/heads/main/Arsenic-Toxic.lua"))()
 
 local Win = Library:Window({
     Title = "MM2 Farm",
     Size = UDim2.fromOffset(540, 420),
 })
 
-if Win.Gui then Win.Gui.Enabled = true end
-if Win.FloatGui then Win.FloatGui.Enabled = true end
 Win:Watermark(true)
 
 local CONFIG = {
-    CoinSkipTime = 3, 
-    Noclip = true, 
-    AutoDie = true, 
-    TargetCoins = 50,
-    AntiAfk = true, 
-    AntiBan = true,
-    CacheMapTime = 5, 
-    PruneInterval = 60, 
-    OverlayRefresh = 1.0,
-    FPSBoost = false, 
-    TeleportDelay = 1.5, 
-    SpinDuration = 0.5, 
-    TeleSpeed = 300,
+    CoinSkipTime = 3, Noclip = true, AutoDie = true, TargetCoins = 50,
+    AntiAfk = true, CacheMapTime = 5, OverlayRefresh = 1.0,
+    TeleportDelay = 1.5, SpinDuration = 0.5, TeleSpeed = 300,
 }
 
 local STATE = {
@@ -39,7 +27,7 @@ local STATE = {
     HasDiedThisRound = false, LastBagCount = 0,
     CachedMap = nil, CachedContainer = nil,
     LastMapCheck = 0, CachedCoinList = nil, LastCoinListTime = 0,
-    Render3DEnabled = true, Teleporting = false, 
+    Teleporting = false, 
 }
 
 local CONNECTIONS = {}
@@ -52,9 +40,7 @@ end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 
@@ -159,16 +145,6 @@ end
 local function GetTarget() return STATE.BagMax > 0 and STATE.BagMax or CONFIG.TargetCoins end
 local function BagFull() return STATE.BagCurrent > 0 and STATE.BagCurrent >= GetTarget() end
 
-task.spawn(function()
-    while true do
-        task.wait(CONFIG.PruneInterval)
-        local now = os.clock()
-        for coin, t in pairs(STATE.SkippedCoins) do
-            if not coin.Parent or now - t > CONFIG.CoinSkipTime then STATE.SkippedCoins[coin] = nil end
-        end
-    end
-end)
-
 local function SetNoclip(enabled)
     if STATE.NoclipConn then STATE.NoclipConn:Disconnect(); STATE.NoclipConn = nil end
     if enabled then
@@ -180,11 +156,6 @@ local function SetNoclip(enabled)
             end
         end)
     end
-end
-
-local function SetFPSBoost(enabled)
-    pcall(function() RunService:Set3dRenderingEnabled(not enabled) end)
-    STATE.Render3DEnabled = not enabled
 end
 
 Track(LP.Idled:Connect(function()
@@ -229,10 +200,19 @@ task.spawn(function()
             
             local distance = (hrp.Position - coin.Position).Magnitude
             local duration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 1.5)
-            local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
-            tween:Play()
             
-            task.wait(duration)
+            local success, err = pcall(function()
+                local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
+                tween:Play()
+                task.wait(duration)
+            end)
+            
+            if not success then
+                pcall(function()
+                    hrp.CFrame = CFrame.new(coin.Position)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end)
+            end
             
             if not STATE.Running then 
                 STATE.Teleporting = false 
@@ -279,7 +259,7 @@ task.spawn(function()
         task.wait(CONFIG.OverlayRefresh)
         pcall(function()
             local coins = STATE.Running and CountCoins() or 0
-            local died = STATE.HasDiedThisRound and " (dead)" or ""
+            local died = STATE.HasDiedThisRound and " (Dead)" or ""
             oLabel.Text = table.concat({
                 STATE.Status .. died,
                 ("Bag: %d/%d | Coin: %d"):format(STATE.BagCurrent, GetTarget(), coins),
@@ -340,31 +320,9 @@ MainABSec:Toggle({ Text = "Auto Die", Default = true, Callback = function(s) CON
 local ActionSec = AntiBanTab:Section("Actions")
 ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Teleporting = false end })
 
-local PerfTab = Win:Tab("Performance")
-local PerfSec = PerfTab:Section("FPS Boost")
-PerfSec:Toggle({
-    Text = "FPS Boost (Disable 3D)",
-    Default = false,
-    Callback = function(s) CONFIG.FPSBoost = s; SetFPSBoost(s) end,
-})
-
-local TuningSec = PerfTab:Section("Tuning")
-TuningSec:Button({
-    Text = "Clear Memory",
-    Callback = function()
-        local now = os.clock()
-        for coin, t in pairs(STATE.SkippedCoins) do
-            if not coin.Parent or now - t > CONFIG.CoinSkipTime then STATE.SkippedCoins[coin] = nil end
-        end
-        STATE.CachedMap = nil; STATE.CachedContainer = nil; STATE.CachedCoinList = nil
-        pcall(function() collectgarbage("collect") end)
-        Win:Notify({Title = "System", Text = "Memory cleared!"})
-    end,
-})
-
 getgenv().MM2FarmCleanup = function()
     STATE.Running = false
-    SetNoclip(false); SetFPSBoost(false)
+    SetNoclip(false)
     DisconnectAll()
     if overlay and overlay.Parent then overlay:Destroy() end
 end
