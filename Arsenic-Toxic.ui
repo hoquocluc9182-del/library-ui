@@ -100,13 +100,13 @@ function Library:Window(opts)
     local size = opts.Size or UDim2.fromOffset(580, 400)
     local configFolder = "ArsenicConfigs"
 
-    local gui = New("ScreenGui", {Name = "ArsenicUI", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true, Enabled = false, Parent = getGuiParent()})
+    local gui = New("ScreenGui", {Name = "ArsenicUI", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, IgnoreGuiInset = true, Enabled = true, Parent = getGuiParent()})
     Library.Gui = gui
     Library.Connections = {}
     Library.AccentObjects = {}
     Library.TextAccentObjects = {}
 
-    local floatGui = New("ScreenGui", {Name = "ArsenicFloatingIcon", ResetOnSpawn = false, IgnoreGuiInset = true, Enabled = false, Parent = getGuiParent()})
+    local floatGui = New("ScreenGui", {Name = "ArsenicFloatingIcon", ResetOnSpawn = false, IgnoreGuiInset = true, Enabled = true, Parent = getGuiParent()})
     local imgBtn = New("ImageButton", {Size = UDim2.new(0, 65, 0, 65), Position = UDim2.new(0, 20, 0.5, -32), BackgroundColor3 = T.Panel, BorderSizePixel = 0, AutoButtonColor = false, Parent = floatGui})
     Corner(imgBtn, 12); Stroke(imgBtn, T.Accent, 2.5)
     imgBtn.Image = SPIN_IMG
@@ -618,79 +618,6 @@ function Library:Window(opts)
             end
         end
         return true
-    end
-
-    function Window:KeySystem(opts)
-        opts = opts or {}
-        local keyGui = New("ScreenGui", {Name = "ArsenicKeySystem", ResetOnSpawn = false, IgnoreGuiInset = true, Parent = getGuiParent()})
-        
-        local keyFrame = New("Frame", {Size = UDim2.fromOffset(350, 220), Position = UDim2.new(0.5, -175, 0.5, -110), BackgroundColor3 = T.Background, BorderSizePixel = 0, Parent = keyGui})
-        Corner(keyFrame, 10); Stroke(keyFrame, T.Stroke, 1.5)
-        
-        local TopBar = New("Frame", {Size = UDim2.new(1, 0, 0, 35), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = keyFrame})
-        Corner(TopBar, 10)
-        New("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = TopBar}) 
-        
-        local keyIcon = New("ImageLabel", {Size = UDim2.new(0, 20, 0, 20), Position = UDim2.new(0, 10, 0.5, -10), BackgroundTransparency = 1, Image = SPIN_IMG, Parent = TopBar})
-        New("TextLabel", {Size = UDim2.new(1, 0, 1, 0), Position = UDim2.new(0, 36, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = opts.Title or "Arsenic Poison Control", Parent = TopBar})
-        SetupDrag(TopBar, keyFrame)
-        
-        local kSpin = RunService.RenderStepped:Connect(function() if keyIcon and keyIcon.Parent then keyIcon.Rotation = (os.clock() * 60) % 360 end end)
-        table.insert(Library.Connections, kSpin)
-
-        New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 45), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = "Enter the antidote (Key) to survive:", Parent = keyFrame})
-        
-        local inputBox = New("TextBox", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 70), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 13, TextColor3 = T.Text, PlaceholderText = "Enter Key...", PlaceholderColor3 = T.SubText, Text = "", ClearTextOnFocus = false, Parent = keyFrame})
-        Corner(inputBox, 6); Stroke(inputBox, T.Stroke, 1)
-        
-        local copyBtn = New("TextButton", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 110), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, Text = "Copy Access Link", AutoButtonColor = false, Parent = keyFrame})
-        Corner(copyBtn, 6)
-        copyBtn.MouseButton1Click:Connect(function()
-            if setclipboard then
-                setclipboard(opts.KeyLink or "https://arsenic-key.com")
-                copyBtn.Text = "Link Copied!"
-                task.delay(2, function() copyBtn.Text = "Copy Access Link" end)
-            else
-                copyBtn.Text = "Device Unsupported!"
-            end
-        end)
-        
-        local submitBtn = New("TextButton", {Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, 150), BackgroundColor3 = T.Accent, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Background, Text = "Administer Antidote", AutoButtonColor = false, Parent = keyFrame})
-        Corner(submitBtn, 6)
-        
-        local statusLbl = New("TextLabel", {Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 190), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Danger, TextXAlignment = Enum.TextXAlignment.Center, Text = "", Parent = keyFrame})
-        
-        submitBtn.MouseButton1Click:Connect(function()
-            statusLbl.Text = "Verifying Toxicity Level..."
-            statusLbl.TextColor3 = T.SubText
-            local key = inputBox.Text
-            if key == "" then
-                statusLbl.Text = "Key cannot be empty!"
-                statusLbl.TextColor3 = T.Danger
-                return
-            end
-            
-            local isValid = false
-            if opts.Validate then
-                local success, result = pcall(opts.Validate, key)
-                if success then isValid = result end
-            else
-                isValid = (key == "arsenic")
-            end
-            
-            if isValid then
-                statusLbl.Text = "Access Granted. Antidote Administered."
-                statusLbl.TextColor3 = T.Success
-                task.wait(0.5)
-                keyGui:Destroy()
-                gui.Enabled = true
-                floatGui.Enabled = true
-            else
-                statusLbl.Text = "Invalid Key. Fatal Error."
-                statusLbl.TextColor3 = T.Danger
-                inputBox.Text = ""
-            end
-        end)
     end
 
     return Window
