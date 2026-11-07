@@ -92,6 +92,19 @@ local function SetupDrag(dragArea, target)
     return function() return isDragged end
 end
 
+local function CreateRipple(button)
+    button.MouseButton1Down:Connect(function(x, y)
+        local ripple = New("Frame", {Size = UDim2.new(0,0,0,0), Position = UDim2.new(0, x - button.AbsolutePosition.X, 0, y - button.AbsolutePosition.Y), BackgroundColor3 = Color3.new(1,1,1), BackgroundTransparency = 0.5, ZIndex = 10, Parent = button})
+        Corner(ripple, 100)
+        TweenService:Create(ripple, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, button.AbsoluteSize.X * 2, 0, button.AbsoluteSize.X * 2),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, (x - button.AbsolutePosition.X) - button.AbsoluteSize.X/2, 0, (y - button.AbsolutePosition.Y) - button.AbsoluteSize.X/2)
+        }):Play()
+        task.delay(0.5, function() ripple:Destroy() end)
+    end)
+end
+
 function Library:Window(opts)
     opts = opts or {}
     CleanupOldGUI()
@@ -135,7 +148,11 @@ function Library:Window(opts)
     closeBtn.MouseLeave:Connect(function() closeBtn.BackgroundColor3 = T.Element end)
 
     local Sidebar = New("Frame", {Size = UDim2.new(0, 140, 1, -40), Position = UDim2.new(0, 0, 0, 40), BackgroundColor3 = T.Sidebar, BorderSizePixel = 0, Parent = Main})
-    local TabList = New("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -10), Position = UDim2.new(0, 0, 0, 10), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = T.Accent, CanvasSize = UDim2.new(0,0,0,0), Parent = Sidebar})
+    
+    local SearchBox = New("TextBox", {Size = UDim2.new(1, -16, 0, 26), Position = UDim2.new(0, 8, 0, 8), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.Text, PlaceholderText = "Search...", PlaceholderColor3 = T.SubText, Text = "", ClearTextOnFocus = false, Parent = Sidebar})
+    Corner(SearchBox, 6); Stroke(SearchBox, T.Stroke, 1)
+
+    local TabList = New("ScrollingFrame", {Size = UDim2.new(1, 0, 1, -50), Position = UDim2.new(0, 0, 0, 40), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = T.Accent, CanvasSize = UDim2.new(0,0,0,0), Parent = Sidebar})
     New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = TabList})
     New("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = TabList})
 
@@ -165,16 +182,40 @@ function Library:Window(opts)
         table.clear(Library.Connections)
     end)
 
+    function Window:Filter(text)
+        text = string.lower(text)
+        if not Window.CurrentTab then return end
+        for _, sec in ipairs(Window.CurrentTab.Sections) do
+            local hasMatch = false
+            for _, el in ipairs(sec.Elements) do
+                local elText = el.Text or ""
+                if text == "" or string.find(string.lower(elText), text, 1, true) then
+                    if el.Frame then el.Frame.Visible = true end
+                    hasMatch = true
+                else
+                    if el.Frame then el.Frame.Visible = false end
+                end
+            end
+            sec.Frame.Visible = (text == "") or hasMatch
+        end
+    end
+
+    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        Window:Filter(SearchBox.Text)
+    end)
+
     function Window:Tab(name, hidden, passKey)
-        local Tab = {Name = name, Hidden = hidden, PassKey = passKey}
+        local Tab = {Name = name, Hidden = hidden, PassKey = passKey, Sections = {}}
         Tab.Frame = New("ScrollingFrame", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.Accent, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, Parent = Content})
         New("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Tab.Frame})
         New("UIPadding", {PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 12), Parent = Tab.Frame})
 
         local btn = New("TextButton", {Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.Element, BorderSizePixel = 0, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, Text = "  " .. (hidden and "🔒 " .. name or name), AutoButtonColor = false, Parent = TabList})
         Corner(btn, 6)
+        CreateRipple(btn)
 
         local function select()
+            SearchBox.Text = ""
             if hidden then
                 local prompt = New("Frame", {Size = UDim2.new(0, 200, 0, 100), Position = UDim2.new(0.5, -100, 0.5, -50), BackgroundColor3 = T.Panel, BorderSizePixel = 0, ZIndex = 100, Parent = gui})
                 Corner(prompt, 8); Stroke(prompt, T.Stroke, 1)
@@ -209,15 +250,31 @@ function Library:Window(opts)
         Tab.Btn = btn
 
         function Tab:Section(secName)
-            local Section = {}
+            local Section = {Name = secName, Elements = {}}
             local Frame = New("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = T.Panel, BorderSizePixel = 0, Parent = Tab.Frame})
             Corner(Frame, 8); Stroke(Frame, T.Stroke, 1)
-            New("TextLabel", {Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 10, 0, 8), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = secName, Parent = Frame})
+            
+            local HeaderBtn = New("TextButton", {Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 8), BackgroundTransparency = 1, Text = "", Parent = Frame})
+            local TitleLbl = New("TextLabel", {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = secName, Parent = HeaderBtn})
+            local ArrowLbl = New("TextLabel", {Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -20, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = T.SubText, Text = "▼", Parent = HeaderBtn})
+            CreateRipple(HeaderBtn)
 
             local C = New("Frame", {Size = UDim2.new(1, -20, 0, 0), Position = UDim2.new(0, 10, 0, 34), BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, Parent = Frame})
             New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = C})
             New("UIPadding", {PaddingBottom = UDim.new(0, 10), Parent = C})
+            
+            local isCollapsed = false
+            HeaderBtn.MouseButton1Click:Connect(function()
+                isCollapsed = not isCollapsed
+                C.Visible = not isCollapsed
+                ArrowLbl.Text = isCollapsed and "▶" or "▼"
+                Frame.AutomaticSize = isCollapsed and Enum.AutomaticSize.None or Enum.AutomaticSize.Y
+                if isCollapsed then Frame.Size = UDim2.new(1, 0, 0, 30) else Frame.Size = UDim2.new(1, 0, 0, 0) end
+            end)
+
+            Section.Frame = Frame
             Section.Content = C
+            table.insert(Tab.Sections, Section)
 
             function Section:Button(o)
                 o = o or {}
@@ -226,7 +283,11 @@ function Library:Window(opts)
                 b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.ElementHover}):Play() end)
                 b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.Element}):Play() end)
                 b.MouseButton1Click:Connect(function() if o.Callback then pcall(o.Callback) end end)
-                return {Instance = b}
+                CreateRipple(b)
+                local api = {Instance = b, Type = "Button", Text = o.Text, Frame = b}
+                table.insert(Section.Elements, api)
+                table.insert(Window.Elements, api)
+                return api
             end
 
             function Section:Toggle(o)
@@ -240,7 +301,7 @@ function Library:Window(opts)
                 local knob = New("Frame", {Size = UDim2.new(0, 14, 0, 14), Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Parent = sw})
                 Corner(knob, 7)
                 local clk = New("TextButton", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", Parent = h})
-                local api = {Value = state, Type = "Toggle", Text = o.Text}
+                local api = {Value = state, Type = "Toggle", Text = o.Text, Frame = h}
                 
                 local function set(v, fire)
                     state = v; api.Value = v
@@ -253,6 +314,7 @@ function Library:Window(opts)
                 clk.MouseButton1Click:Connect(function() set(not state, true) end)
                 api.Set = function(v, fire) set(v, fire) end
                 api.Get = function() return state end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -274,7 +336,7 @@ function Library:Window(opts)
                 Corner(fill, 3); RegisterAccent(fill)
                 local knob = New("Frame", {Size = UDim2.new(0, 14, 0, 14), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 0, 0.5, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 3, Parent = bar})
                 Corner(knob, 7)
-                local api = {Value = val, Type = "Slider", Text = o.Text}
+                local api = {Value = val, Type = "Slider", Text = o.Text, Frame = h}
                 
                 local function set(v, fire)
                     v = math.clamp(v, min, max); v = math.floor(v * mult + 0.5) / mult
@@ -298,6 +360,7 @@ function Library:Window(opts)
                 
                 api.Set = function(v, fire) set(v, fire) end
                 api.Get = function() return val end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -309,10 +372,11 @@ function Library:Window(opts)
                 New("TextLabel", {Size = UDim2.new(1, -160, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Left, Text = o.Text or "TextBox", Parent = h})
                 local tb = New("TextBox", {Size = UDim2.new(0, 140, 0, 24), Position = UDim2.new(1, -150, 0.5, -12), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.Text, PlaceholderText = o.Placeholder or "Type here...", PlaceholderColor3 = T.SubText, Text = o.Default or "", ClearTextOnFocus = false, Parent = h})
                 Corner(tb, 5); Stroke(tb, T.Stroke, 1)
-                local api = {Value = o.Default or "", Type = "TextBox", Text = o.Text}
+                local api = {Value = o.Default or "", Type = "TextBox", Text = o.Text, Frame = h}
                 tb.FocusLost:Connect(function(enter) api.Value = tb.Text; if o.Callback then pcall(o.Callback, tb.Text, enter) end end)
                 api.Set = function(v) tb.Text = tostring(v); api.Value = v end
                 api.Get = function() return tb.Text end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -326,7 +390,7 @@ function Library:Window(opts)
                 local btn = New("TextButton", {Size = UDim2.new(0, 80, 0, 22), Position = UDim2.new(1, -90, 0.5, -11), BackgroundColor3 = T.Background, BorderSizePixel = 0, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Accent, Text = key.Name, AutoButtonColor = false, Parent = h})
                 Corner(btn, 5); Stroke(btn, T.Stroke, 1); RegisterAccent(btn, true)
                 
-                local api = {Value = key, Type = "Keybind", Text = o.Text, Listening = false}
+                local api = {Value = key, Type = "Keybind", Text = o.Text, Listening = false, Frame = h}
                 btn.MouseButton1Click:Connect(function()
                     if api.Listening then return end
                     api.Listening = true; btn.Text = "..."
@@ -341,6 +405,7 @@ function Library:Window(opts)
                 end)
                 api.Set = function(k) key = k; btn.Text = k.Name; api.Value = k end
                 api.Get = function() return key end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -365,7 +430,7 @@ function Library:Window(opts)
                 Corner(list, 6)
                 New("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Parent = list})
 
-                local api = {Value = multi and selectedItems or current, Type = "Dropdown", Text = o.Text}
+                local api = {Value = multi and selectedItems or current, Type = "Dropdown", Text = o.Text, Frame = h}
                 local optionButtons = {}; local open = false
 
                 local function refresh()
@@ -411,6 +476,7 @@ function Library:Window(opts)
                     end
                 end
                 api.Get = function() return api.Value end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -424,7 +490,7 @@ function Library:Window(opts)
                 local colorBtn = New("TextButton", {Size = UDim2.new(0, 24, 0, 24), Position = UDim2.new(1, -34, 0.5, -12), BackgroundColor3 = color, BorderSizePixel = 0, Text = "", AutoButtonColor = false, Parent = h})
                 Corner(colorBtn, 4); Stroke(colorBtn, T.Stroke, 1)
                 
-                local api = {Value = color, Type = "ColorPicker", Text = o.Text}
+                local api = {Value = color, Type = "ColorPicker", Text = o.Text, Frame = h}
                 colorBtn.MouseButton1Click:Connect(function()
                     local picker = New("Frame", {Size = UDim2.new(0, 200, 0, 180), Position = UDim2.new(1, -210, 0.5, -90), BackgroundColor3 = T.Panel, BorderSizePixel = 0, ZIndex = 50, Parent = gui})
                     Corner(picker, 8); Stroke(picker, T.Stroke, 1)
@@ -466,6 +532,7 @@ function Library:Window(opts)
                 
                 api.Set = function(c) color = c; api.Value = c; colorBtn.BackgroundColor3 = c; if o.Callback then pcall(o.Callback, c) end end
                 api.Get = function() return api.Value end
+                table.insert(Section.Elements, api)
                 table.insert(Window.Elements, api)
                 return api
             end
@@ -473,7 +540,10 @@ function Library:Window(opts)
             function Section:Paragraph(o)
                 o = o or {}
                 local p = New("TextLabel", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.SubText, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, Text = o.Text or "Paragraph text...", Parent = C})
-                return {Instance = p}
+                local api = {Instance = p, Type = "Paragraph", Text = o.Text, Frame = p}
+                table.insert(Section.Elements, api)
+                table.insert(Window.Elements, api)
+                return api
             end
 
             function Section:Divider()
