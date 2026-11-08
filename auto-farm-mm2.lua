@@ -12,11 +12,9 @@ local Win = Library:Window({
     Size = UDim2.fromOffset(540, 420),
 })
 
-Win:Watermark(true)
-
 local CONFIG = {
     CoinSkipTime = 3, Noclip = true, AutoDie = true, TargetCoins = 50,
-    AntiAfk = true, CacheMapTime = 10, OverlayRefresh = 1.0,
+    AntiAfk = true, CacheMapTime = 5, OverlayRefresh = 1.0,
     TeleportDelay = 1.5, SpinDuration = 0.5, TeleSpeed = 300,
 }
 
@@ -27,8 +25,9 @@ local STATE = {
     HasDiedThisRound = false, LastBagCount = 0,
     CachedMap = nil, CachedContainer = nil,
     LastMapCheck = 0, CachedCoinList = nil, LastCoinListTime = 0,
-    Teleporting = false, TeleStartTime = 0, TeleDuration = 0,
-    Spinning = false, SpinStartTime = 0,
+    Phase = "Idle", CurrentCoin = nil,
+    TeleStartTime = 0, TeleDuration = 0,
+    SpinStartTime = 0, WaitStartTime = 0,
 }
 
 local CONNECTIONS = {}
@@ -68,7 +67,7 @@ end
 local function OnNewRound()
     STATE.BagCurrent = 0; STATE.BagMax = 0; STATE.CoinsThisRound = 0
     STATE.Rounds += 1; STATE.HasDiedThisRound = false; STATE.LastBagCount = 0
-    STATE.Teleporting = false; STATE.Spinning = false
+    STATE.Phase = "Idle"; STATE.CurrentCoin = nil
     table.clear(STATE.SkippedCoins)
     STATE.CachedMap = nil; STATE.CachedContainer = nil; STATE.LastMapCheck = 0; STATE.CachedCoinList = nil
 end
@@ -166,75 +165,100 @@ Track(LP.Idled:Connect(function()
 end))
 
 task.spawn(function()
-    while task.wait(0.5) do
-        if not STATE.Running then continue end
-        
-        local hrp = GetRoot()
-        local hum = GetHumanoid()
-        
-        if not hrp or not hum or hum.Health <= 0 then
-            STATE.Status = "Waiting for character..."
-            STATE.Teleporting = false; STATE.Spinning = false
-            continue
-        end
-        
-        if STATE.Teleporting then
-            if os.clock() >= STATE.TeleStartTime + STATE.TeleDuration then
-                STATE.Teleporting = false
-                STATE.Spinning = true
-                STATE.SpinStartTime = os.clock()
+    while task.wait(0.03) do
+        pcall(function()
+            if not STATE.Running then 
+                STATE.Phase = "Idle"
+                return 
             end
-            continue
-        end
-        
-        if STATE.Spinning then
-            if os.clock() >= STATE.SpinStartTime + CONFIG.SpinDuration then
-                STATE.Spinning = false
-                task.wait(CONFIG.TeleportDelay)
-            else
+            
+            local hrp = GetRoot()
+            local hum = GetHumanoid()
+            
+            if not hrp or not hum or hum.Health <= 0 then
+                STATE.Status = "Waiting for character..."
+                STATE.Phase = "Idle"
+                return
+            end
+            
+            if STATE.Phase == "Teleporting" then
+                if os.clock() >= STATE.TeleStartTime + STATE.TeleDuration then
+                    STATE.Phase = "Spinning"
+                    STATE.SpinStartTime = os.clock()
+                end
+                return
+            end
+            
+            if STATE.Phase == "Spinning" then
+                local coin = STATE.CurrentCoin
+                if not coin or not coin.Parent then
+                    STATE.Phase = "Idle"
+                    return
+                end
+                
+                local elapsed = os.clock() - STATE.SpinStartTime
+                if elapsed >= CONFIG.SpinDuration then
+                    STATE.Phase = "Waiting"
+                    STATE.WaitStartTime = os.clock()
+                    return
+                end
+                
+                local targetCFrame = CFrame.new(coin.Position)
+                local angle = (elapsed / CONFIG.SpinDuration) * math.pi * 4
+                
                 local currentHrp = GetRoot()
                 if currentHrp then
-                    pcall(function()
-                        currentHrp.CFrame = currentHrp.CFrame * CFrame.Angles(0, math.rad(35), 0)
-                    end)
+                    currentHrp.CFrame = targetCFrame * CFrame.Angles(0, angle, 0)
+                    currentHrp.AssemblyLinearVelocity = Vector3.zero
+                    currentHrp.AssemblyAngularVelocity = Vector3.zero
+                end
+                return
+            end
+            
+            if STATE.Phase == "Waiting" then
+                if os.clock() >= STATE.WaitStartTime + CONFIG.TeleportDelay then
+                    if STATE.CurrentCoin then
+                        STATE.SkippedCoins[STATE.CurrentCoin] = os.clock()
+                        STATE.CurrentCoin = nil
+                    end
+                    STATE.Phase = "Idle"
+                end
+                return
+            end
+            
+            if STATE.Phase == "Idle" then
+                if BagFull() and not STATE.HasDiedThisRound then
+                    STATE.Status = ("Reached %d -> Dying"):format(GetTarget())
+                    if CONFIG.AutoDie then 
+                        STATE.HasDiedThisRound = true
+                        hum.Health = 0 
+                    end
+                    return
+                end
+                
+                local map, container = GetMap()
+                if not map then
+                    STATE.Status = "Map not found..."
+                    return
+                end
+                
+                local coin = FindNearestCoin(hrp.Position)
+                if coin and coin.Parent then
+                    STATE.Phase = "Teleporting"
+                    STATE.CurrentCoin = coin
+                    STATE.Status = ("Teleporting (%d/%d)"):format(STATE.BagCurrent, GetTarget())
+                    
+                    local distance = (hrp.Position - coin.Position).Magnitude
+                    STATE.TeleDuration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 0.8)
+                    STATE.TeleStartTime = os.clock()
+                    
+                    local tween = TweenService:Create(hrp, TweenInfo.new(STATE.TeleDuration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
+                    tween:Play()
+                else
+                    STATE.Status = "No coins left."
                 end
             end
-            continue
-        end
-        
-        if BagFull() and not STATE.HasDiedThisRound then
-            STATE.Status = ("Reached %d -> Dying"):format(GetTarget())
-            if CONFIG.AutoDie then 
-                STATE.HasDiedThisRound = true
-                hum.Health = 0 
-            end
-            continue
-        end
-        
-        local map, container = GetMap()
-        if not map then
-            STATE.Status = "Map not found..."
-            continue
-        end
-        
-        local coin = FindNearestCoin(hrp.Position)
-        if coin and coin.Parent then
-            STATE.Teleporting = true
-            STATE.Status = ("Teleporting (%d/%d)"):format(STATE.BagCurrent, GetTarget())
-            
-            local distance = (hrp.Position - coin.Position).Magnitude
-            STATE.TeleDuration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 1.0)
-            STATE.TeleStartTime = os.clock()
-            
-            pcall(function()
-                local tween = TweenService:Create(hrp, TweenInfo.new(STATE.TeleDuration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
-                tween:Play()
-            end)
-            
-            STATE.SkippedCoins[coin] = os.clock()
-        else
-            STATE.Status = "No coins left."
-        end
+        end)
     end
 end)
 
@@ -279,13 +303,12 @@ FarmSec:Toggle({
         STATE.Running = state
         if state then
             STATE.SkippedCoins = {}; STATE.HasDiedThisRound = false; STATE.LastBagCount = 0
-            STATE.Teleporting = false; STATE.Spinning = false
+            STATE.Phase = "Idle"; STATE.CurrentCoin = nil
             STATE.Status = "Farming..."
             if CONFIG.Noclip then SetNoclip(true) end
-            Win:Notify({ Title = "MM2 Farm", Text = "Started farming", Duration = 4 })
         else
             SetNoclip(false); STATE.Status = "Stopped"
-            Win:Notify({ Title = "MM2 Farm", Text = "Stopped farming", Duration = 3 })
+            STATE.Phase = "Idle"; STATE.CurrentCoin = nil
         end
     end,
 })
@@ -318,7 +341,7 @@ MainABSec:Toggle({ Text = "Anti-AFK", Default = true, Callback = function(s) CON
 MainABSec:Toggle({ Text = "Auto Die", Default = true, Callback = function(s) CONFIG.AutoDie = s end })
 
 local ActionSec = AntiBanTab:Section("Actions")
-ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Teleporting = false; STATE.Spinning = false end })
+ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Phase = "Idle"; STATE.CurrentCoin = nil end })
 
 getgenv().MM2FarmCleanup = function()
     STATE.Running = false
