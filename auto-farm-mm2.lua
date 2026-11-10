@@ -15,13 +15,14 @@ local Win = Library:Window({
 local CONFIG = {
     CoinSkipTime = 3, Noclip = true, AutoDie = true, TargetCoins = 50,
     AntiAfk = true, CacheMapTime = 5, OverlayRefresh = 1.0,
-    TeleportDelay = 1.5, SpinDuration = 0.5, TeleSpeed = 300,
+    TeleportDelay = 1.5, SpinDuration = 0.5, TeleSpeed = 300, FarmSpeed = 20,
+    FarmMode = "Teleport"
 }
 
 local STATE = {
     Running = false, BagCurrent = 0, BagMax = 0, Status = "Ready",
     CoinsTotal = 0, CoinsThisRound = 0, Rounds = 0,
-    SkippedCoins = {}, NoclipConn = nil,
+    SkippedCoins = {}, NoclipConn = nil, Mover = nil, Attachment = nil,
     HasDiedThisRound = false, LastBagCount = 0,
     CachedMap = nil, CachedContainer = nil,
     LastMapCheck = 0, CachedCoinList = nil, LastCoinListTime = 0,
@@ -158,6 +159,25 @@ local function SetNoclip(enabled)
     end
 end
 
+local function AttachMover(hrp)
+    if STATE.Mover then return end
+    local att = Instance.new("Attachment")
+    att.Parent = hrp
+    local mover = Instance.new("LinearVelocity")
+    mover.Attachment0 = att
+    mover.MaxForce = math.huge
+    mover.RelativeTo = Enum.ActuatorRelativeTo.World
+    mover.VectorVelocity = Vector3.zero
+    mover.Parent = hrp
+    STATE.Mover = mover
+    STATE.Attachment = att
+end
+
+local function DetachMover()
+    if STATE.Mover then STATE.Mover:Destroy(); STATE.Mover = nil end
+    if STATE.Attachment then STATE.Attachment:Destroy(); STATE.Attachment = nil end
+end
+
 Track(LP.Idled:Connect(function()
     if not CONFIG.AntiAfk then return end
     VirtualUser:CaptureController()
@@ -169,6 +189,7 @@ task.spawn(function()
         pcall(function()
             if not STATE.Running then 
                 STATE.Phase = "Idle"
+                DetachMover()
                 return 
             end
             
@@ -178,6 +199,7 @@ task.spawn(function()
             if not hrp or not hum or hum.Health <= 0 then
                 STATE.Status = "Waiting for character..."
                 STATE.Phase = "Idle"
+                DetachMover()
                 return
             end
             
@@ -185,6 +207,29 @@ task.spawn(function()
                 if os.clock() >= STATE.TeleStartTime + STATE.TeleDuration then
                     STATE.Phase = "Spinning"
                     STATE.SpinStartTime = os.clock()
+                end
+                return
+            end
+            
+            if STATE.Phase == "Flying" then
+                local coin = STATE.CurrentCoin
+                if not coin or not coin.Parent then
+                    DetachMover()
+                    STATE.Phase = "Idle"
+                    return
+                end
+                local dist = (hrp.Position - coin.Position).Magnitude
+                if dist < 5 then
+                    DetachMover()
+                    STATE.Phase = "Spinning"
+                    STATE.SpinStartTime = os.clock()
+                else
+                    if not STATE.Mover or STATE.Mover.Parent ~= hrp then
+                        DetachMover()
+                        AttachMover(hrp)
+                    end
+                    local delta = coin.Position - hrp.Position
+                    STATE.Mover.VectorVelocity = delta.Unit * CONFIG.FarmSpeed
                 end
                 return
             end
@@ -198,8 +243,16 @@ task.spawn(function()
                 
                 local elapsed = os.clock() - STATE.SpinStartTime
                 if elapsed >= CONFIG.SpinDuration then
-                    STATE.Phase = "Waiting"
-                    STATE.WaitStartTime = os.clock()
+                    if CONFIG.FarmMode == "Teleport" then
+                        STATE.Phase = "Waiting"
+                        STATE.WaitStartTime = os.clock()
+                    else
+                        if STATE.CurrentCoin then
+                            STATE.SkippedCoins[STATE.CurrentCoin] = os.clock()
+                            STATE.CurrentCoin = nil
+                        end
+                        STATE.Phase = "Idle"
+                    end
                     return
                 end
                 
@@ -244,16 +297,20 @@ task.spawn(function()
                 
                 local coin = FindNearestCoin(hrp.Position)
                 if coin and coin.Parent then
-                    STATE.Phase = "Teleporting"
                     STATE.CurrentCoin = coin
-                    STATE.Status = ("Teleporting (%d/%d)"):format(STATE.BagCurrent, GetTarget())
-                    
-                    local distance = (hrp.Position - coin.Position).Magnitude
-                    STATE.TeleDuration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 0.8)
-                    STATE.TeleStartTime = os.clock()
-                    
-                    local tween = TweenService:Create(hrp, TweenInfo.new(STATE.TeleDuration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
-                    tween:Play()
+                    if CONFIG.FarmMode == "Teleport" then
+                        STATE.Phase = "Teleporting"
+                        STATE.Status = ("Teleporting (%d/%d)"):format(STATE.BagCurrent, GetTarget())
+                        local distance = (hrp.Position - coin.Position).Magnitude
+                        STATE.TeleDuration = math.clamp(distance / CONFIG.TeleSpeed, 0.05, 0.8)
+                        STATE.TeleStartTime = os.clock()
+                        local tween = TweenService:Create(hrp, TweenInfo.new(STATE.TeleDuration, Enum.EasingStyle.Linear), {CFrame = CFrame.new(coin.Position)})
+                        tween:Play()
+                    else
+                        STATE.Phase = "Flying"
+                        STATE.Status = ("Flying (%d/%d)"):format(STATE.BagCurrent, GetTarget())
+                        AttachMover(hrp)
+                    end
                 else
                     STATE.Status = "No coins left."
                 end
@@ -309,7 +366,17 @@ FarmSec:Toggle({
         else
             SetNoclip(false); STATE.Status = "Stopped"
             STATE.Phase = "Idle"; STATE.CurrentCoin = nil
+            DetachMover()
         end
+    end,
+})
+
+FarmSec:Dropdown({
+    Text = "Farm Mode",
+    Options = {"Teleport", "Fly"},
+    Default = "Teleport",
+    Callback = function(v) 
+        CONFIG.FarmMode = v 
     end,
 })
 
@@ -323,6 +390,12 @@ FarmSec:Slider({
     Text = "Teleport Delay (s)",
     Min = 1, Max = 5, Default = 1.5, Decimals = 1,
     Callback = function(v) CONFIG.TeleportDelay = tonumber(v) or 1.5 end,
+})
+
+FarmSec:Slider({
+    Text = "Fly Speed",
+    Min = 16, Max = 50, Default = 20,
+    Callback = function(v) CONFIG.FarmSpeed = tonumber(v) or 20 end,
 })
 
 FarmSec:Button({
@@ -341,11 +414,12 @@ MainABSec:Toggle({ Text = "Anti-AFK", Default = true, Callback = function(s) CON
 MainABSec:Toggle({ Text = "Auto Die", Default = true, Callback = function(s) CONFIG.AutoDie = s end })
 
 local ActionSec = AntiBanTab:Section("Actions")
-ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Phase = "Idle"; STATE.CurrentCoin = nil end })
+ActionSec:Button({ Text = "Emergency Stop", Callback = function() STATE.Running = false; SetNoclip(false); STATE.Phase = "Idle"; STATE.CurrentCoin = nil; DetachMover() end })
 
 getgenv().MM2FarmCleanup = function()
     STATE.Running = false
     SetNoclip(false)
+    DetachMover()
     DisconnectAll()
     if overlay and overlay.Parent then overlay:Destroy() end
 end
